@@ -1,1 +1,70 @@
 # Scan-your-local-network-
+import socket
+import threading
+from queue import Queue
+
+# -------- Settings --------
+COMMON_PORTS = [21, 22, 23, 25, 53, 80, 110, 139, 143, 443, 445, 3389]
+TIMEOUT = 0.5
+MAX_THREADS = 100
+
+print("[*] Simple Local Network Port Scanner")
+print("[*] Use only on networks you own or have permission to scan.\n")
+
+# -------- Get local IP and subnet --------
+def get_local_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    except:
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
+
+local_ip = get_local_ip()
+subnet = ".".join(local_ip.split(".")[:-1])  # e.g., 192.168.1
+
+print(f"[*] Your IP: {local_ip}")
+print(f"[*] Scanning subnet: {subnet}.0/24\n")
+
+# -------- Port scan function --------
+def scan_port(ip, port):
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock.settimeout(TIMEOUT)
+    try:
+        result = sock.connect_ex((ip, port))
+        if result == 0:
+            print(f"[+] {ip}:{port} OPEN")
+    except:
+        pass
+    finally:
+        sock.close()
+
+# -------- Worker thread --------
+def worker():
+    while not q.empty():
+        ip, port = q.get()
+        scan_port(ip, port)
+        q.task_done()
+
+# -------- Queue setup --------
+q = Queue()
+
+for i in range(1, 255):
+    target_ip = f"{subnet}.{i}"
+    for port in COMMON_PORTS:
+        q.put((target_ip, port))
+
+# -------- Start threads --------
+threads = []
+for _ in range(MAX_THREADS):
+    t = threading.Thread(target=worker)
+    t.daemon = True
+    t.start()
+    threads.append(t)
+
+q.join()
+
+print("\n[*] Scan complete.")
